@@ -178,8 +178,18 @@ void MyFrame::OnKey(wxKeyEvent& event) {
     wxDateTime now = wxDateTime::UNow();
 
 
+    // Handle Enter key press
+    if (keyCode == WXK_RETURN || keyCode == WXK_NUMPAD_ENTER) {
+        if (currentSelectedTileIndex != -1 && currentSelectedTileIndex < tileLabels.size()) {
+            wxTextCtrl* labelCtrl = tileLabels[currentSelectedTileIndex];
+            if (labelCtrl) {
+                labelCtrl->SetFocus();
+                labelCtrl->SelectAll(); // Optional: Select all text for immediate editing
+            }
+        }
+    }
     // Handle number keys (1-5)
-    if (keyCode >= '1' && keyCode <= '4') {
+    else if (keyCode >= '1' && keyCode <= '4') {
         int tileIndex = (visibleRow * 4) + (keyCode - '1');
         SelectTile(tileIndex);
         // Check if this is a double press
@@ -189,8 +199,8 @@ void MyFrame::OnKey(wxKeyEvent& event) {
             StartTimerForTile(tileIndex);
             lastKeyPressTime.erase(keyCode);
         }
-
-        lastKeyPressTime[keyCode] = now;
+        else
+            lastKeyPressTime[keyCode] = now;
     }
     else {
         event.Skip(); // Allow other handlers to process the event

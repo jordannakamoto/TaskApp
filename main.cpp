@@ -18,8 +18,8 @@
 
 
 #include <wx/wx.h>
-#include <wx/grid.h>
-#include <wx/listbox.h> // Add this line to include ListBox header
+#include <wx/listctrl.h>
+#include <wx/listbox.h> 
 #include <wx/colour.h>
 #include <wx/combobox.h>
 #include <wx/font.h>
@@ -48,24 +48,24 @@ class TileTimer : public wxTimer {
     wxStaticText* timerLabel;
     wxDateTime startTime;
     wxTimeSpan pausedTime;
+    wxTimeSpan timeElapsed;
 
 public:
     TileTimer(wxStaticText* label) : timerLabel(label), startTime(wxDateTime::Now()) {}
 
     void Notify() override {
-        wxTimeSpan timeElapsed = wxDateTime::Now() - startTime + pausedTime;
-
+        timeElapsed = wxDateTime::Now() - startTime + pausedTime;
         // Update the label only if more than 1 minute has elapsed
-
         timerLabel->SetLabel(wxString::Format("%dm", timeElapsed.GetMinutes()));
-        timerLabel->SetForegroundColour(*wxBLUE); // Set the text color to blue
         
     }
 
     void StartTimer() {
+        timerLabel->SetForegroundColour(*wxBLUE); // Set the text color to blue
         if (!this->IsRunning()) {
             if (pausedTime == wxTimeSpan(0)) {
                 // Timer is starting for the first time
+                timerLabel->SetLabel(wxString::Format("%dm", timeElapsed.GetMinutes()));
                 startTime = wxDateTime::Now();
             } else {
                 // Resuming the timer
@@ -106,16 +106,23 @@ wxIMPLEMENT_APP(MyApp);
 class MyFrame : public wxFrame {
 public:
     MyFrame(const wxString& title);
-    std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
-
 
 private:
     // Add pointers to the grid and panel as member variables
-    wxGrid* subTasksGrid;
+    wxListCtrl* subTasksListCtrl;
     wxScrolledWindow* scrollArea;
     wxButton* currentSelectedButton = nullptr;
+
+    // Document Data Structures to be managed by the view
+    std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
     std::vector<wxButton*> tileButtons; // Store button references
     std::map<int, TileTimer*> tileTimers;
+
+    // View Items
+    std::vector<int> bitmapIDs;
+
+    wxBitmap normalBitmap; // Bitmap for normal state
+    wxBitmap selectedBitmap; // Bitmap for selected state
 
     // Handlers for events
     void OnExit(wxCommandEvent& event);
@@ -135,6 +142,9 @@ private:
 
     std::map<int, wxDateTime> lastKeyPressTime;
 
+    // Loaders
+    void LoadBitmaps();
+
     // Declare the event table for wxWidgets to use
     wxDECLARE_EVENT_TABLE();
 };
@@ -146,24 +156,21 @@ wxEND_EVENT_TABLE()
 
 // ...
 
-void MyFrame::OnButtonClicked(wxCommandEvent& event) {
-    int tileIndex = event.GetId() - 1; // Subtract 1 because IDs start from 1
-    SelectTile(tileIndex);
-}
-
-
 
 void MyFrame::LoadSubTasks(int tileNumber) {
-    // Clear the existing grid
-    subTasksGrid->ClearGrid();
-    
-    // Load sub-tasks for the selected tile
-    // This is just placeholder logic, replace with actual sub-task loading
-    for (int row = 0; row < subTasksGrid->GetNumberRows(); ++row) {
-        subTasksGrid->SetCellValue(row, 0, wxString::Format("Sub-task %d for Tile %d", row + 1, tileNumber));
+    // Clear the existing list control
+    subTasksListCtrl->DeleteAllItems();
+
+    // Placeholder logic for adding sub-tasks
+    // Replace this with your actual sub-task loading logic
+    for (int i = 0; i < 5; ++i) { // Assuming a maximum of 5 sub-tasks for simplicity
+        subTasksListCtrl->InsertItem(i, wxString::Format("Sub-task %d for Tile %d", i + 1, tileNumber));
     }
-     subTasksGrid->AutoSizeColumns();
+
+    // Adjust the column width to fit the new items
+    subTasksListCtrl->SetColumnWidth(0, wxLIST_AUTOSIZE);
 }
+
 
 void MyFrame::OnKey(wxKeyEvent& event) {
     int keyCode = event.GetKeyCode();
@@ -178,7 +185,7 @@ void MyFrame::OnKey(wxKeyEvent& event) {
         // Check if this is a double press
         if (lastKeyPressTime.count(keyCode) > 0 && 
             (now - lastKeyPressTime[keyCode]).GetMilliseconds() < 500) { // 500 ms for double press
-            int tileIndex = (visibleRow * 5) + (keyCode - '1');
+            int tileIndex = (visibleRow * 4) + (keyCode - '1');
             StartTimerForTile(tileIndex);
         }
 
@@ -192,13 +199,16 @@ void MyFrame::OnKey(wxKeyEvent& event) {
 
 bool MyApp::OnInit() {
     wxInitAllImageHandlers();
-    MyFrame *frame = new MyFrame("Task Manager");
-    frame->SetInitialSize(wxSize(640, 480)); // Set the default screen size
+    MyFrame *frame = new MyFrame("MiniTask");
+    frame->SetInitialSize(wxSize(520, 480)); // Set the default screen size
     frame->Show(true);
     return true;
 }
 
 MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
+    // Load things from file system
+    LoadBitmaps();
+    
     // Create a panel to put all our widgets on
     wxPanel *panel = new wxPanel(this, wxID_ANY);
 
@@ -211,14 +221,14 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
 
 
     // Set the initial size of the scroll area
-    wxSize initialScrollAreaSize(640, 120); // Replace with your desired size
+    wxSize initialScrollAreaSize(520, 120); // Replace with your desired size
     scrollArea = new wxScrolledWindow(panel, wxID_ANY, wxDefaultPosition, initialScrollAreaSize, wxVSCROLL);
     scrollArea->SetScrollRate(0, 10); // Vertical scroll rate
     scrollArea->SetBackgroundColour(wxColour("#edf3f9"));
 
 
     // Sizer for scroll area content
-    wxGridSizer* gridSizer = new wxGridSizer(4, 5, 5); // 5 columns, 5px vertical and horizontal gaps
+    wxGridSizer* gridSizer = new wxGridSizer(4, 4, 0); // 5 columns, 5px vertical and horizontal gaps
 
     
     // Create buttons styled as tiles with timers
@@ -231,13 +241,13 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
         wxPanel *tile = new wxPanel(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
         wxBoxSizer *tileSizer = new wxBoxSizer(wxVERTICAL);
         
-         // Load the PNG image
-        wxString exePath = wxStandardPaths::Get().GetExecutablePath();
-        wxString imagePath = wxFileName(exePath).GetPath() + wxFileName::GetPathSeparator() + "Assets" + wxFileName::GetPathSeparator() + "tile3.png";
+        // Generate a unique ID for the bitmap
+        int bitmapID = wxNewId();
+        bitmapIDs.push_back(bitmapID); // Store the ID in the vector
 
         // Create a static bitmap to display the image
-        wxStaticBitmap *tileBitmapCtrl = new wxStaticBitmap(tile, wxID_ANY, wxBitmap(imagePath, wxBITMAP_TYPE_PNG));
-
+        wxStaticBitmap *normalTileImage = new wxStaticBitmap(tile, bitmapID, normalBitmap);
+        
 
         std::string tileLabel = wxString::Format("Build Thing%d", i + 1).ToStdString();
         tileDataMap[i] = TileData(tileLabel);
@@ -259,26 +269,30 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
 
     }
 
-
-
     // Set the grid sizer for the scroll area
     scrollArea->SetSizer(gridSizer);
     scrollArea->Layout();
 
     // Initialize the grid to display sub-tasks
-    subTasksGrid = new wxGrid(panel, wxID_ANY);
-    subTasksGrid->CreateGrid(5, 1); // Example: 5 rows for sub-tasks, 1 column
-    subTasksGrid->SetColLabelValue(0, "Sub-tasks"); // Set the header for the column
-    subTasksGrid->AutoSizeColumns();
-    subTasksGrid->SetColLabelSize(0);
-    subTasksGrid->SetRowLabelSize(0);
+    // Initialize the list control to display sub-tasks
+    subTasksListCtrl = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_NO_HEADER);
+    subTasksListCtrl->InsertColumn(0, "Sub-tasks"); // Add a single column
+
+    // Example: Add 5 rows for sub-tasks
+    for (int i = 0; i < 5; ++i) {
+        subTasksListCtrl->InsertItem(i, wxString::Format("Sub-task %d", i + 1));
+    }
+
+    subTasksListCtrl->SetColumnWidth(0, wxLIST_AUTOSIZE_USEHEADER);
+    subTasksListCtrl->Show(true);
+
 
 
     // Main Sizer for the frame
     wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
     mainSizer->Add(customCombo, 0, wxEXPAND | wxALL, 5);
     mainSizer->Add(scrollArea, 0, wxEXPAND | wxALL, 5); // Remove the proportion argument to fix the height
-    mainSizer->Add(subTasksGrid, 1, wxEXPAND | wxALL, 5);
+    mainSizer->Add(subTasksListCtrl, 1, wxEXPAND | wxALL, 5);
     
     panel->SetSizer(mainSizer);
     mainSizer->SetSizeHints(this);
@@ -294,25 +308,28 @@ void MyFrame::SelectTile(int tileIndex) {
 
     // Reset the style of the previously selected button
     if (currentSelectedButton) {
-        currentSelectedButton->SetBackgroundColour(wxNullColour); // Default color
-        currentSelectedButton->Refresh();
+            wxStaticBitmap* associatedBitmap = dynamic_cast<wxStaticBitmap*>(wxWindow::FindWindowById(bitmapIDs[currentSelectedButton->GetId()-1]));
+            if (associatedBitmap) {
+                // Change the bitmap
+                associatedBitmap->SetBitmap(normalBitmap);
+                associatedBitmap->Refresh();
+            }
     }
 
     // Update currentSelectedButton and highlight the new selected button
     currentSelectedButton = tileButtons[tileIndex];
-    currentSelectedButton->SetBackgroundColour(*wxLIGHT_GREY); // Highlight color
-    currentSelectedButton->Refresh();
-    // scrollArea->Scroll((tileIndex) * 6, -1);
-     // Set scroll based on tile position
+    wxStaticBitmap* associatedBitmap = dynamic_cast<wxStaticBitmap*>(wxWindow::FindWindowById(bitmapIDs[tileIndex]));
+    if (associatedBitmap) {
+                // Change the bitmap
+                associatedBitmap->SetBitmap(selectedBitmap);
+                associatedBitmap->Refresh();
+            }
+    // scrollArea->Scroll((tileIndex) * 6, -1); // Set scroll based on tile position
 
     // Load sub-tasks for the selected tile
     LoadSubTasks(tileIndex + 1); // tileIndex + 1 because IDs start from 1
 }
 
-
-void MyFrame::OnExit(wxCommandEvent& event) {
-    Close(true);
-}
 
 int MyFrame::GetVisibleRowIndex() {
     int x, y;
@@ -320,6 +337,12 @@ int MyFrame::GetVisibleRowIndex() {
 
     int rowHeight = 10; // Assuming each tile (and hence each row) is 100 pixels high
     return y / rowHeight; // Calculate the index of the visible row
+}
+
+
+void MyFrame::OnButtonClicked(wxCommandEvent& event) {
+    int tileIndex = event.GetId() - 1; // Subtract 1 because IDs start from 1
+    SelectTile(tileIndex);
 }
 
 void MyFrame::OnTileDoubleClick(wxMouseEvent& event) {
@@ -336,3 +359,19 @@ void MyFrame::StartTimerForTile(int tileIndex) {
     // Start or restart the timer
     tileTimers[tileIndex]->StartTimer();
 }
+
+void MyFrame::OnExit(wxCommandEvent& event) {
+    Close(true);
+}
+
+// MyFrame Loaders
+
+void MyFrame::LoadBitmaps() {
+        wxString exePath = wxStandardPaths::Get().GetExecutablePath();
+        wxString basePath = wxFileName(exePath).GetPath() + wxFileName::GetPathSeparator() + "Assets" + wxFileName::GetPathSeparator();
+        wxString normalImagePath = basePath + "tile3.png";
+        wxString selectedImagePath = basePath + "tile3_selected.png";
+
+        normalBitmap = wxBitmap(normalImagePath, wxBITMAP_TYPE_PNG);
+        selectedBitmap = wxBitmap(selectedImagePath, wxBITMAP_TYPE_PNG);
+    }

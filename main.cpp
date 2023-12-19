@@ -1,21 +1,3 @@
-/*
-// Main:
-// Duties:
-// --------------------
-// I.  Draws UI Canvas and accepts User Mouse/Keyboard Input
-//
-// UI Features:
-// Datatype Menu, Db Records Grid, Context Menu
-// --------------------
-// II. Communicates with MYSQL Database
-//
-// Db API Features:
-// Creates connection to local MYSQL instance.
-// Links database commands SQL <-> CPP Interface to Program User Interface
-// Create, Read, Update, Delete
-// --------------------
-*/
-
 
 #include <wx/wx.h>
 #include <wx/listctrl.h>
@@ -96,6 +78,7 @@ private:
     void LoadData();
 
 
+     void OnClose(wxCloseEvent& event);
     // Declare the event table for wxWidgets to use
     wxDECLARE_EVENT_TABLE();
 };
@@ -171,6 +154,8 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     // Load things from file system
     LoadBitmaps();
 
+    Bind(wxEVT_CLOSE_WINDOW, &MyFrame::OnClose, this);
+
     // Load current document (project)
     
     // Create a panel to put all our widgets on
@@ -183,18 +168,15 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     customCombo->Append("Project 3");
     customCombo->Append("Project 4");
 
-
     // Set the initial size of the scroll area
     wxSize initialScrollAreaSize(520, 120); // Replace with your desired size
     scrollArea = new wxScrolledWindow(panel, wxID_ANY, wxDefaultPosition, initialScrollAreaSize, wxVSCROLL);
     scrollArea->SetScrollRate(0, 10); // Vertical scroll rate
     scrollArea->SetBackgroundColour(wxColour("#edf3f9"));
 
-
     // Sizer for scroll area content
     wxGridSizer* gridSizer = new wxGridSizer(4, 4, 0); // 5 columns, 5px vertical and horizontal gaps
 
-    
     // Create buttons styled as tiles with timers
     const int numTiles = 1;
     const wxString timerText = "00:00"; // Placeholder text for the timer
@@ -217,8 +199,10 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
 
 
 
-        tileDataMap[i] = TileData(tileLabelCtrl->GetValue().ToStdString(),0);
+        tileDataMap[i] = TileData(tileLabelCtrl->GetValue().ToStdString(),0.0);
         tileLabels.push_back(tileLabelCtrl); // Store the text control reference
+        TileData& tileData = tileDataMap[i];
+        
 
         // Create a label for the timer
         wxStaticText* timerLabel = new wxStaticText(tile, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
@@ -226,6 +210,7 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
 
         // Store the label in a map or similar structure
         timerLabels[i] = timerLabel;
+        tileTimers[i] = new TileTimer(timerLabels[i], tileData);
 
         tileSizer->Add(tileLabelCtrl, 0, wxALIGN_CENTER | wxALL, 5);
 
@@ -251,8 +236,6 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     subTasksListCtrl->SetColumnWidth(0, wxLIST_AUTOSIZE_USEHEADER);
     subTasksListCtrl->Show(true);
 
-
-
     // Main Sizer for the frame
     wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
     mainSizer->Add(customCombo, 0, wxEXPAND | wxALL, 5);
@@ -262,7 +245,6 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     panel->SetSizer(mainSizer);
     mainSizer->SetSizeHints(this);
     this->Bind(wxEVT_CHAR_HOOK, &MyFrame::OnKey, this);
-
 }
 
 void MyFrame::SelectTile(int tileIndex) {
@@ -314,11 +296,6 @@ void MyFrame::OnTileDoubleClick(wxMouseEvent& event) {
 }
 
 void MyFrame::StartTimerForTile(int tileIndex) {
-    if (tileTimers.find(tileIndex) == tileTimers.end()) {
-        // If there's no timer for this tile, create one
-        tileTimers[tileIndex] = new TileTimer(timerLabels[tileIndex]);
-    }
-
     // Start or restart the timer
     tileTimers[tileIndex]->StartTimer();
 }
@@ -341,11 +318,15 @@ void MyFrame::LoadBitmaps() {
 
 // Saving/Loading data
 void MyFrame::SaveData() {
-    wxString path = wxSaveFileSelector("task data", "xml");
-    if (!path.IsEmpty()) {
-        std::ofstream out(path.ToStdString());
+    // wxString path = wxSaveFileSelector("task data", "xml");
+    wxString exePath = wxStandardPaths::Get().GetExecutablePath();
+    wxString basePath = wxFileName(exePath).GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+
+    wxString savePath = basePath + "test.xml";
+    taskListDoc.tileDataMap = tileDataMap;
+        std::ofstream out(savePath.ToStdString());
         taskListDoc.SaveObject(out);
-    }
+    
 }
 
 void MyFrame::LoadData() {
@@ -354,4 +335,9 @@ void MyFrame::LoadData() {
         std::ifstream in(path.ToStdString());
         taskListDoc.LoadObject(in);
     }
+}
+
+void MyFrame::OnClose(wxCloseEvent& event) {
+    SaveData(); // Save the data
+    event.Skip(); // Proceed with the default close behavior
 }

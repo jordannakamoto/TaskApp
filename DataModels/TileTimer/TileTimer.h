@@ -11,13 +11,17 @@ class TileTimer : public wxTimer {
     wxDateTime startTime;
     wxTimeSpan pausedTime;
     wxTimeSpan timeElapsed;
+    TileData& tileData; // Reference to TileData
 
 public:
-    TileTimer(wxStaticText* label) : timerLabel(label), startTime(wxDateTime::Now()) {}
+    TileTimer(wxStaticText* label, TileData& data) 
+        : timerLabel(label), tileData(data), startTime(wxDateTime::Now()) {}
+
 
     void Notify() override {
         timeElapsed = wxDateTime::Now() - startTime + pausedTime;
         // Update the label only if more than 1 minute has elapsed
+        tileData.timerElapsed = timeElapsed.GetSeconds().GetValue();
         timerLabel->SetLabel(wxString::Format("%dm", timeElapsed.GetMinutes()));
     }
 

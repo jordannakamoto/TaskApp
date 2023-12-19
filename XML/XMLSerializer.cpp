@@ -8,7 +8,8 @@ wxXmlDocument XMLSerializer::SerializeTileDataMap(const std::map<int, TileData>&
         wxXmlNode* tileNode = new wxXmlNode(wxXML_ELEMENT_NODE, "Tile");
         tileNode->AddAttribute("id", wxString::Format("%d", pair.first));
         tileNode->AddAttribute("label", pair.second.label); // Directly access the label
-        tileNode->AddAttribute("timerElapsed", wxString::Format("%d", pair.second.timerElapsed));
+        wxLongLong seconds = pair.second.timerElapsed;
+        tileNode->AddAttribute("timerElapsed", wxString::Format("%lld", seconds.GetValue()));
 
         for (const auto& subtask : pair.second.subTasks) {
             wxXmlNode* subtaskNode = new wxXmlNode(wxXML_ELEMENT_NODE, "SubTask");
@@ -32,7 +33,9 @@ std::map<int, TileData> XMLSerializer::DeserializeTileDataMap(const wxXmlDocumen
             int id = wxAtoi(tileNode->GetAttribute("id", "0"));
             TileData tileData;
             tileData.label = tileNode->GetAttribute("label", "").ToStdString();
-            tileData.timerElapsed = wxAtoi(tileNode->GetAttribute("timerElapsed", "0"));
+            long long elapsedSeconds;
+                tileData.timerElapsed = tileNode->GetAttribute("timerElapsed", "0").ToLongLong(&elapsedSeconds);
+            
 
             for (wxXmlNode* subtaskNode = tileNode->GetChildren(); subtaskNode; subtaskNode = subtaskNode->GetNext()) {
                 if (subtaskNode->GetName() == "SubTask") {

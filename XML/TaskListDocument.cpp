@@ -11,15 +11,19 @@ std::ostream &TaskListDocument::SaveObject(std::ostream &stream)
 
     // Wrap the std::ostream
     auto wrapper = OStreamWrapper(stream);
-    serializer.CompressXml(doc, wrapper);
+    doc.Save(wrapper);
     return stream;
+
+    
 }
 
 std::istream &TaskListDocument::LoadObject(std::istream &stream)
 {
-    // Wrap the std::istream
-    auto wrapper=  IStreamWrapper(stream);
-    wxXmlDocument doc = serializer.DecompressXml(wrapper);
+    // // Wrap the std::istream
+    // auto wrapper=  IStreamWrapper(stream);
+    // wxXmlDocument doc = serializer.DecompressXml(wrapper);
+
+    auto doc = IStreamWrapper(stream);
 
     // Deserialize the XML document back into tileDataMap
     tileDataMap = serializer.DeserializeTileDataMap(doc);

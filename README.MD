@@ -2,7 +2,7 @@
 
 ![GitHub contributors](https://img.shields.io/github/stars/jordannakamoto/355CarDealership?style=social)
 
-Simple app with a native Desktop UI that demonstrates a cpp program that interacts with a local mysql database.
+Task App
 
 ![Screenshot](https://i.ibb.co/hd2ds9z/Screenshot-2023-12-05-at-10-56-19-PM.png)
 

@@ -111,11 +111,11 @@ private:
     // Add pointers to the grid and panel as member variables
     wxListCtrl* subTasksListCtrl;
     wxScrolledWindow* scrollArea;
-    wxButton* currentSelectedButton = nullptr;
+    int currentSelectedTileIndex = -1;
 
     // Document Data Structures to be managed by the view
     std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
-    std::vector<wxButton*> tileButtons; // Store button references
+    std::vector<wxTextCtrl*> tileLabels; // Store button references
     std::map<int, TileTimer*> tileTimers;
 
     // View Items
@@ -127,7 +127,7 @@ private:
     // Handlers for events
     void OnExit(wxCommandEvent& event);
     void OnKey(wxKeyEvent& event);
-    void OnButtonClicked(wxCommandEvent& event);
+    void OnTileClicked(wxMouseEvent& event);
     void OnTileDoubleClick(wxMouseEvent& event);
 
     // Helper function to load sub-tasks
@@ -151,7 +151,7 @@ private:
 
 // Event table to connect events to handlers
 wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
-    EVT_BUTTON(wxID_ANY, MyFrame::OnButtonClicked)
+    EVT_LEFT_DOWN(MyFrame::OnTileClicked)
 wxEND_EVENT_TABLE()
 
 // ...
@@ -187,6 +187,7 @@ void MyFrame::OnKey(wxKeyEvent& event) {
             (now - lastKeyPressTime[keyCode]).GetMilliseconds() < 500) { // 500 ms for double press
             int tileIndex = (visibleRow * 4) + (keyCode - '1');
             StartTimerForTile(tileIndex);
+            lastKeyPressTime.erase(keyCode);
         }
 
         lastKeyPressTime[keyCode] = now;
@@ -235,39 +236,40 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     const int numTiles = 8;
     const wxString timerText = "00:00"; // Placeholder text for the timer
     const wxSize tilesize(100, 100); // Define a fixed size for the tiles
-    
     // CREATE TILES:
     for (int i = 0; i < numTiles; ++i) {
         wxPanel *tile = new wxPanel(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
         wxBoxSizer *tileSizer = new wxBoxSizer(wxVERTICAL);
-        
-        // Generate a unique ID for the bitmap
-        int bitmapID = wxNewId();
-        bitmapIDs.push_back(bitmapID); // Store the ID in the vector
 
         // Create a static bitmap to display the image
-        wxStaticBitmap *normalTileImage = new wxStaticBitmap(tile, bitmapID, normalBitmap);
-        
+        wxStaticBitmap *tileImage = new wxStaticBitmap(tile, i, normalBitmap);
+        tileImage->Bind(wxEVT_LEFT_DOWN, &MyFrame::OnTileClicked, this);
+        tileImage->Bind(wxEVT_LEFT_DCLICK, &MyFrame::OnTileDoubleClick, this);
 
-        std::string tileLabel = wxString::Format("Build Thing%d", i + 1).ToStdString();
-        tileDataMap[i] = TileData(tileLabel);
-        wxButton *button = new wxButton(tile, i + 1, wxString::Format("Build Thing%d", i + 1), wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
-        button->Bind(wxEVT_LEFT_DCLICK, &MyFrame::OnTileDoubleClick, this);
-        tileButtons.push_back(button);
+        // Create a text control for the tile label
+        wxTextCtrl* tileLabelCtrl = new wxTextCtrl(tile, wxID_ANY, wxString::Format("Build Thing%d", i + 1),
+                                               wxDefaultPosition, wxSize(85, 60),
+                                               wxTE_PROCESS_ENTER | wxTE_MULTILINE | wxBORDER_NONE);
+        // tileLabelCtrl->Bind(wxEVT_TEXT_ENTER, &MyFrame::OnTileLabelEdit, this);
+
+
+
+        tileDataMap[i] = TileData(tileLabelCtrl->GetValue().ToStdString());
+        tileLabels.push_back(tileLabelCtrl); // Store the text control reference
+
         // Create a label for the timer
         wxStaticText* timerLabel = new wxStaticText(tile, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
         tileSizer->Add(timerLabel, 0, wxALIGN_CENTER | wxALL, 5);
 
         // Store the label in a map or similar structure
         timerLabels[i] = timerLabel;
-        
-        tileSizer->Add(button, 1, wxALIGN_CENTER | wxALL, 5);
-        
+
+        tileSizer->Add(tileLabelCtrl, 0, wxALIGN_CENTER | wxALL, 5);
+
         tile->SetSizer(tileSizer);
         tile->Layout();
         gridSizer->Add(tile, 1, wxALIGN_CENTER | wxALL, 5);
-
-    }
+}
 
     // Set the grid sizer for the scroll area
     scrollArea->SetSizer(gridSizer);
@@ -302,13 +304,13 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
 
 void MyFrame::SelectTile(int tileIndex) {
     // Ensure the tile index is within range
-    if (tileIndex < 0 || tileIndex >= tileButtons.size()) {
+    if (tileIndex < 0 || tileIndex >= tileLabels.size()) {
         return; // Invalid tile index
     }
 
     // Reset the style of the previously selected button
-    if (currentSelectedButton) {
-            wxStaticBitmap* associatedBitmap = dynamic_cast<wxStaticBitmap*>(wxWindow::FindWindowById(bitmapIDs[currentSelectedButton->GetId()-1]));
+    if (currentSelectedTileIndex != -1) {
+            wxStaticBitmap* associatedBitmap = dynamic_cast<wxStaticBitmap*>(wxWindow::FindWindowById(currentSelectedTileIndex));
             if (associatedBitmap) {
                 // Change the bitmap
                 associatedBitmap->SetBitmap(normalBitmap);
@@ -316,16 +318,14 @@ void MyFrame::SelectTile(int tileIndex) {
             }
     }
 
-    // Update currentSelectedButton and highlight the new selected button
-    currentSelectedButton = tileButtons[tileIndex];
-    wxStaticBitmap* associatedBitmap = dynamic_cast<wxStaticBitmap*>(wxWindow::FindWindowById(bitmapIDs[tileIndex]));
-    if (associatedBitmap) {
-                // Change the bitmap
-                associatedBitmap->SetBitmap(selectedBitmap);
-                associatedBitmap->Refresh();
-            }
+    // Update the bitmap of the new selected tile
+    wxStaticBitmap* newSelectedBitmap = dynamic_cast<wxStaticBitmap*>(wxWindow::FindWindowById(tileIndex));
+    if (newSelectedBitmap) {
+        newSelectedBitmap->SetBitmap(selectedBitmap);
+        newSelectedBitmap->Refresh();
+    }
     // scrollArea->Scroll((tileIndex) * 6, -1); // Set scroll based on tile position
-
+    currentSelectedTileIndex = tileIndex;
     // Load sub-tasks for the selected tile
     LoadSubTasks(tileIndex + 1); // tileIndex + 1 because IDs start from 1
 }
@@ -340,13 +340,13 @@ int MyFrame::GetVisibleRowIndex() {
 }
 
 
-void MyFrame::OnButtonClicked(wxCommandEvent& event) {
-    int tileIndex = event.GetId() - 1; // Subtract 1 because IDs start from 1
+void MyFrame::OnTileClicked(wxMouseEvent& event) {
+    int tileIndex = event.GetId(); // Subtract 1 because IDs start from 1
     SelectTile(tileIndex);
 }
 
 void MyFrame::OnTileDoubleClick(wxMouseEvent& event) {
-    int tileIndex = event.GetId() - 1;
+    int tileIndex = event.GetId();
     StartTimerForTile(tileIndex);
 }
 

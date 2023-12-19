@@ -28,10 +28,12 @@
 #include <wx/filename.h>
 #include <wx/image.h>
 #include <wx/timer.h>
-
+#include "XML/TaskListDocument.h"
+#include "DataModels/TileTimer/TileTimer.h"
 
 #include <map>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <string>
 
@@ -43,63 +45,6 @@ public:
     virtual bool OnInit();
 };
 
-// tileTimer class
-class TileTimer : public wxTimer {
-    wxStaticText* timerLabel;
-    wxDateTime startTime;
-    wxTimeSpan pausedTime;
-    wxTimeSpan timeElapsed;
-
-public:
-    TileTimer(wxStaticText* label) : timerLabel(label), startTime(wxDateTime::Now()) {}
-
-    void Notify() override {
-        timeElapsed = wxDateTime::Now() - startTime + pausedTime;
-        // Update the label only if more than 1 minute has elapsed
-        timerLabel->SetLabel(wxString::Format("%dm", timeElapsed.GetMinutes()));
-        
-    }
-
-    void StartTimer() {
-        timerLabel->SetForegroundColour(*wxBLUE); // Set the text color to blue
-        if (!this->IsRunning()) {
-            if (pausedTime == wxTimeSpan(0)) {
-                // Timer is starting for the first time
-                timerLabel->SetLabel(wxString::Format("%dm", timeElapsed.GetMinutes()));
-                startTime = wxDateTime::Now();
-            } else {
-                // Resuming the timer
-                startTime = wxDateTime::Now() - pausedTime;
-                pausedTime = wxTimeSpan(0);
-            }
-            this->Start(1000); // Update every second
-        } else {
-            // Timer is already running, so pause it
-            PauseTimer();
-        }
-    }
-
-    void PauseTimer() {
-        if (this->IsRunning()) {
-            this->Stop();
-            pausedTime += wxDateTime::Now() - startTime;
-            timerLabel->SetForegroundColour(*wxLIGHT_GREY); // Set the text color to blue
-        }
-    }
-};
-
-class TileData {
-public:
-    std::string label;                       
-    std::vector<std::string> subTasks;       
-
-    TileData() {}  // Default constructor
-    TileData(const std::string& lbl) : label(lbl) {}
-
-    void addSubTask(const std::string& subTask) {
-        subTasks.push_back(subTask);
-    }
-};
 // Implement MyApp & MyFrame
 wxIMPLEMENT_APP(MyApp);
 
@@ -112,6 +57,7 @@ private:
     wxListCtrl* subTasksListCtrl;
     wxScrolledWindow* scrollArea;
     int currentSelectedTileIndex = -1;
+    TaskListDocument taskListDoc;
 
     // Document Data Structures to be managed by the view
     std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
@@ -144,6 +90,11 @@ private:
 
     // Loaders
     void LoadBitmaps();
+
+    // Document Save/Load
+    void SaveData();
+    void LoadData();
+
 
     // Declare the event table for wxWidgets to use
     wxDECLARE_EVENT_TABLE();
@@ -219,6 +170,8 @@ bool MyApp::OnInit() {
 MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     // Load things from file system
     LoadBitmaps();
+
+    // Load current document (project)
     
     // Create a panel to put all our widgets on
     wxPanel *panel = new wxPanel(this, wxID_ANY);
@@ -243,7 +196,7 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
 
     
     // Create buttons styled as tiles with timers
-    const int numTiles = 8;
+    const int numTiles = 1;
     const wxString timerText = "00:00"; // Placeholder text for the timer
     const wxSize tilesize(100, 100); // Define a fixed size for the tiles
     // CREATE TILES:
@@ -264,7 +217,7 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
 
 
 
-        tileDataMap[i] = TileData(tileLabelCtrl->GetValue().ToStdString());
+        tileDataMap[i] = TileData(tileLabelCtrl->GetValue().ToStdString(),0);
         tileLabels.push_back(tileLabelCtrl); // Store the text control reference
 
         // Create a label for the timer
@@ -385,3 +338,20 @@ void MyFrame::LoadBitmaps() {
         normalBitmap = wxBitmap(normalImagePath, wxBITMAP_TYPE_PNG);
         selectedBitmap = wxBitmap(selectedImagePath, wxBITMAP_TYPE_PNG);
     }
+
+// Saving/Loading data
+void MyFrame::SaveData() {
+    wxString path = wxSaveFileSelector("task data", "xml");
+    if (!path.IsEmpty()) {
+        std::ofstream out(path.ToStdString());
+        taskListDoc.SaveObject(out);
+    }
+}
+
+void MyFrame::LoadData() {
+    wxString path = wxLoadFileSelector("task data", "xml");
+    if (!path.IsEmpty()) {
+        std::ifstream in(path.ToStdString());
+        taskListDoc.LoadObject(in);
+    }
+}

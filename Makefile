@@ -5,6 +5,9 @@ CXX = clang++ -stdlib=libc++
 
 # Define your source files
 SRC = main.cpp \
+		XML/TileData.cpp \
+		XML/TaskListDocument.cpp \
+		XML/XMLSerializer.cpp \
       # Add other .cpp files here
 
 # Define object files from source files

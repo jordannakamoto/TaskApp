@@ -1,24 +1,8 @@
-#include <wx/xml/xml.h>
-#include <wx/fs_zip.h>
-#include <wx/zipstrm.h>
-#include <wx/wfstream.h>
-#include <map>
-#include <vector>
+#include "TaskListDocument.h"
+#include "streamutils.h"
 
-class TaskListDocument : public wxDocument{
-    public:
-    std::ostream &SaveToXML(std::ostream &stream) override;
-    std::istream &LoadFromXML (std::istream &stream) override;
 
-    std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
-    std::vector<wxButton*> tileButtons; // Store button references
-    std::map<int, TileTimer*> tileTimers; // Store timer references
-
-    XMLSerializer serializer;
-
-    wxDECLARE_DYNAMCIC_CLASS(TaskListDocument);
-
-}
+wxIMPLEMENT_DYNAMIC_CLASS(TaskListDocument, wxDocument);
 
 std::ostream &TaskListDocument::SaveObject(std::ostream &stream)
 {
@@ -26,7 +10,7 @@ std::ostream &TaskListDocument::SaveObject(std::ostream &stream)
     wxXmlDocument doc = serializer.SerializeTileDataMap(tileDataMap);
 
     // Wrap the std::ostream
-    wxOutputStreamWrapper wrapper(stream);
+    auto wrapper = OStreamWrapper(stream);
     serializer.CompressXml(doc, wrapper);
     return stream;
 }
@@ -34,7 +18,7 @@ std::ostream &TaskListDocument::SaveObject(std::ostream &stream)
 std::istream &TaskListDocument::LoadObject(std::istream &stream)
 {
     // Wrap the std::istream
-    wxInputStreamWrapper wrapper(stream);
+    auto wrapper=  IStreamWrapper(stream);
     wxXmlDocument doc = serializer.DecompressXml(wrapper);
 
     // Deserialize the XML document back into tileDataMap

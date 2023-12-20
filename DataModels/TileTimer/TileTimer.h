@@ -17,6 +17,11 @@ public:
     TileTimer(wxStaticText* label, TileData& data) 
         : timerLabel(label), tileData(data), startTime(wxDateTime::Now()) {}
 
+    TileTimer(wxStaticText* label, TileData& data, wxTimeSpan time_elapsed) 
+        : timerLabel(label), tileData(data), startTime(wxDateTime::Now()), timeElapsed(time_elapsed) {
+            pausedTime = timeElapsed;
+        }
+
 
     void Notify() override {
         timeElapsed = wxDateTime::Now() - startTime + pausedTime;

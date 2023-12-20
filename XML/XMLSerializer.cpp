@@ -27,21 +27,23 @@ wxXmlDocument XMLSerializer::SerializeTileDataMap(const std::map<int, TileData>&
 std::map<int, TileData> XMLSerializer::DeserializeTileDataMap(const wxXmlDocument& doc) {
     std::map<int, TileData> tileDataMap;
     wxXmlNode* root = doc.GetRoot();
+    if (!root) {
+        // Log error or handle the missing root node
+        return tileDataMap;
+    }
 
     for (wxXmlNode* tileNode = root->GetChildren(); tileNode; tileNode = tileNode->GetNext()) {
         if (tileNode->GetName() == "Tile") {
             int id = wxAtoi(tileNode->GetAttribute("id", "0"));
             TileData tileData;
             tileData.label = tileNode->GetAttribute("label", "").ToStdString();
-            long long elapsedSeconds;
-                tileData.timerElapsed = tileNode->GetAttribute("timerElapsed", "0").ToLongLong(&elapsedSeconds);
             
-
-            for (wxXmlNode* subtaskNode = tileNode->GetChildren(); subtaskNode; subtaskNode = subtaskNode->GetNext()) {
-                if (subtaskNode->GetName() == "SubTask") {
-                    tileData.subTasks.push_back(subtaskNode->GetNodeContent().ToStdString());
-                }
-            }
+            wxString timerElapsedStr = tileNode->GetAttribute("timerElapsed", "0");
+            long long elapsedSeconds;
+            timerElapsedStr.ToLongLong(&elapsedSeconds);
+            tileData.timerElapsed = elapsedSeconds;
+            
+            // Process SubTask nodes if present (currently not in your XML)
 
             tileDataMap[id] = tileData;
         }
@@ -49,6 +51,7 @@ std::map<int, TileData> XMLSerializer::DeserializeTileDataMap(const wxXmlDocumen
 
     return tileDataMap;
 }
+
 void XMLSerializer::CompressXml(const wxXmlDocument &doc, wxOutputStream &outStream)
     {
         wxZipOutputStream zip(outStream);

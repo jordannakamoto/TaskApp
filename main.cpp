@@ -25,6 +25,7 @@ using std::endl;
 class MyApp : public wxApp {
 public:
     virtual bool OnInit();
+    
 };
 
 // Implement MyApp & MyFrame
@@ -34,10 +35,14 @@ class MyFrame : public wxFrame {
 public:
     MyFrame(const wxString& title);
 
+    wxString exePath = wxStandardPaths::Get().GetExecutablePath();
+    wxString basePath = wxFileName(exePath).GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "test";
+
 private:
     // Add pointers to the grid and panel as member variables
     wxListCtrl* subTasksListCtrl;
     wxScrolledWindow* scrollArea;
+    wxGridSizer* gridSizer;
     int currentSelectedTileIndex = -1;
     TaskListDocument taskListDoc;
 
@@ -47,7 +52,8 @@ private:
     std::map<int, TileTimer*> tileTimers;
 
     // View Items
-    std::vector<int> bitmapIDs;
+    void CreateNewTile();
+    const wxSize tilesize; // Define a fixed size for the tiles   
 
     wxBitmap normalBitmap; // Bitmap for normal state
     wxBitmap selectedBitmap; // Bitmap for selected state
@@ -57,6 +63,7 @@ private:
     void OnKey(wxKeyEvent& event);
     void OnTileClicked(wxMouseEvent& event);
     void OnTileDoubleClick(wxMouseEvent& event);
+    void OnTileLabelEdit(wxCommandEvent& event);
 
     // Helper function to load sub-tasks
     void LoadSubTasks(int tileNumber);
@@ -72,10 +79,11 @@ private:
 
     // Loaders
     void LoadBitmaps();
+    void CreateTilesFromData();
 
     // Document Save/Load
-    void SaveData();
-    void LoadData();
+    void SaveData(const wxString& baseFilePath);
+    void LoadData(const wxString& baseFilePath);
 
 
      void OnClose(wxCloseEvent& event);
@@ -92,16 +100,13 @@ wxEND_EVENT_TABLE()
 
 
 void MyFrame::LoadSubTasks(int tileNumber) {
-    // Clear the existing list control
     subTasksListCtrl->DeleteAllItems();
 
-    // Placeholder logic for adding sub-tasks
     // Replace this with your actual sub-task loading logic
     for (int i = 0; i < 5; ++i) { // Assuming a maximum of 5 sub-tasks for simplicity
         subTasksListCtrl->InsertItem(i, wxString::Format("Sub-task %d for Tile %d", i + 1, tileNumber));
     }
 
-    // Adjust the column width to fit the new items
     subTasksListCtrl->SetColumnWidth(0, wxLIST_AUTOSIZE);
 }
 
@@ -136,11 +141,15 @@ void MyFrame::OnKey(wxKeyEvent& event) {
         else
             lastKeyPressTime[keyCode] = now;
     }
+    else if (event.GetModifiers() == wxMOD_CMD && event.GetKeyCode() == 'T') {
+        CreateNewTile();
+    }
     else {
         event.Skip(); // Allow other handlers to process the event
     }
-    event.Skip();
 }
+
+// INIT
 
 bool MyApp::OnInit() {
     wxInitAllImageHandlers();
@@ -150,7 +159,7 @@ bool MyApp::OnInit() {
     return true;
 }
 
-MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
+MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesize(100, 100) {
     // Load things from file system
     LoadBitmaps();
 
@@ -175,49 +184,12 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     scrollArea->SetBackgroundColour(wxColour("#edf3f9"));
 
     // Sizer for scroll area content
-    wxGridSizer* gridSizer = new wxGridSizer(4, 4, 0); // 5 columns, 5px vertical and horizontal gaps
+    gridSizer = new wxGridSizer(4, 4, 0); // 5 columns, 5px vertical and horizontal gaps
 
-    // Create buttons styled as tiles with timers
-    const int numTiles = 1;
-    const wxString timerText = "00:00"; // Placeholder text for the timer
-    const wxSize tilesize(100, 100); // Define a fixed size for the tiles
+
     // CREATE TILES:
-    for (int i = 0; i < numTiles; ++i) {
-        wxPanel *tile = new wxPanel(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
-        wxBoxSizer *tileSizer = new wxBoxSizer(wxVERTICAL);
-
-        // Create a static bitmap to display the image
-        wxStaticBitmap *tileImage = new wxStaticBitmap(tile, i, normalBitmap);
-        tileImage->Bind(wxEVT_LEFT_DOWN, &MyFrame::OnTileClicked, this);
-        tileImage->Bind(wxEVT_LEFT_DCLICK, &MyFrame::OnTileDoubleClick, this);
-
-        // Create a text control for the tile label
-        wxTextCtrl* tileLabelCtrl = new wxTextCtrl(tile, wxID_ANY, wxString::Format("Build Thing%d", i + 1),
-                                               wxDefaultPosition, wxSize(85, 60),
-                                               wxTE_PROCESS_ENTER | wxTE_MULTILINE | wxBORDER_NONE);
-        // tileLabelCtrl->Bind(wxEVT_TEXT_ENTER, &MyFrame::OnTileLabelEdit, this);
-
-
-
-        tileDataMap[i] = TileData(tileLabelCtrl->GetValue().ToStdString(),0.0);
-        tileLabels.push_back(tileLabelCtrl); // Store the text control reference
-        TileData& tileData = tileDataMap[i];
-        
-
-        // Create a label for the timer
-        wxStaticText* timerLabel = new wxStaticText(tile, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
-        tileSizer->Add(timerLabel, 0, wxALIGN_CENTER | wxALL, 5);
-
-        // Store the label in a map or similar structure
-        timerLabels[i] = timerLabel;
-        tileTimers[i] = new TileTimer(timerLabels[i], tileData);
-
-        tileSizer->Add(tileLabelCtrl, 0, wxALIGN_CENTER | wxALL, 5);
-
-        tile->SetSizer(tileSizer);
-        tile->Layout();
-        gridSizer->Add(tile, 1, wxALIGN_CENTER | wxALL, 5);
-}
+    LoadData(basePath);
+    CreateTilesFromData();
 
     // Set the grid sizer for the scroll area
     scrollArea->SetSizer(gridSizer);
@@ -237,14 +209,17 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title) {
     subTasksListCtrl->Show(true);
 
     // Main Sizer for the frame
+    // Add a padding border or margin around the panel
+    int borderSize = 15;
     wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
-    mainSizer->Add(customCombo, 0, wxEXPAND | wxALL, 5);
-    mainSizer->Add(scrollArea, 0, wxEXPAND | wxALL, 5); // Remove the proportion argument to fix the height
-    mainSizer->Add(subTasksListCtrl, 1, wxEXPAND | wxALL, 5);
-    
+    mainSizer->Add(customCombo, 0, wxEXPAND | wxALL, 10);
+    mainSizer->Add(scrollArea, 0, wxEXPAND | wxALL, 10); // Remove the proportion argument to fix the height
+    mainSizer->Add(subTasksListCtrl, 1, wxEXPAND | wxALL, 10);
+
     panel->SetSizer(mainSizer);
     mainSizer->SetSizeHints(this);
     this->Bind(wxEVT_CHAR_HOOK, &MyFrame::OnKey, this);
+    Centre();
 }
 
 void MyFrame::SelectTile(int tileIndex) {
@@ -307,37 +282,138 @@ void MyFrame::OnExit(wxCommandEvent& event) {
 // MyFrame Loaders
 
 void MyFrame::LoadBitmaps() {
-        wxString exePath = wxStandardPaths::Get().GetExecutablePath();
-        wxString basePath = wxFileName(exePath).GetPath() + wxFileName::GetPathSeparator() + "Assets" + wxFileName::GetPathSeparator();
-        wxString normalImagePath = basePath + "tile3.png";
-        wxString selectedImagePath = basePath + "tile3_selected.png";
+        wxString baseAssetsPath = wxFileName(exePath).GetPath() + wxFileName::GetPathSeparator() + "Assets" + wxFileName::GetPathSeparator();
+        wxString normalImagePath = baseAssetsPath + "tile3.png";
+        wxString selectedImagePath = baseAssetsPath + "tile3_selected.png";
 
         normalBitmap = wxBitmap(normalImagePath, wxBITMAP_TYPE_PNG);
         selectedBitmap = wxBitmap(selectedImagePath, wxBITMAP_TYPE_PNG);
     }
 
 // Saving/Loading data
-void MyFrame::SaveData() {
+void MyFrame::SaveData(const wxString& baseFilePath) {
     // wxString path = wxSaveFileSelector("task data", "xml");
-    wxString exePath = wxStandardPaths::Get().GetExecutablePath();
-    wxString basePath = wxFileName(exePath).GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
-
-    wxString savePath = basePath + "test.xml";
+    wxString savePath = baseFilePath + ".xml";
     taskListDoc.tileDataMap = tileDataMap;
         std::ofstream out(savePath.ToStdString());
         taskListDoc.SaveObject(out);
     
 }
 
-void MyFrame::LoadData() {
-    wxString path = wxLoadFileSelector("task data", "xml");
-    if (!path.IsEmpty()) {
-        std::ifstream in(path.ToStdString());
+void MyFrame::LoadData(const wxString& baseFilePath) {
+    wxString loadPath = baseFilePath + ".xml";
+    if (!loadPath.IsEmpty()) {
+        std::ifstream in(loadPath.ToStdString());
         taskListDoc.LoadObject(in);
+        tileDataMap = taskListDoc.tileDataMap;
     }
 }
 
 void MyFrame::OnClose(wxCloseEvent& event) {
-    SaveData(); // Save the data
+    SaveData(basePath); // Save the data
     event.Skip(); // Proceed with the default close behavior
 }
+// ...
+
+// CREATE Tile(Task) Creation
+
+void MyFrame::CreateNewTile() {
+    int newTileIndex = tileDataMap.size();  // Determine the new tile's index
+
+    // Create a panel for the new tile
+    wxWindow *tile = new wxWindow(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
+    wxBoxSizer *tileSizer = new wxBoxSizer(wxVERTICAL);
+
+    // Create a static bitmap for the tile
+    wxStaticBitmap *tileImage = new wxStaticBitmap(tile, newTileIndex, normalBitmap);
+    tileImage->Bind(wxEVT_LEFT_DOWN, &MyFrame::OnTileClicked, this);
+    tileImage->Bind(wxEVT_LEFT_DCLICK, &MyFrame::OnTileDoubleClick, this);
+    
+    // Create a text control for the tile label
+    wxTextCtrl* tileLabelCtrl = new wxTextCtrl(tile, wxID_ANY, wxString::Format("New Task %d", newTileIndex + 1),
+                                               wxDefaultPosition, wxSize(85, 60),
+                                               wxTE_PROCESS_ENTER | wxTE_MULTILINE | wxBORDER_NONE);
+    // Attach event bindings
+
+    // Add to data structures
+    tileDataMap[newTileIndex] = TileData(tileLabelCtrl->GetValue().ToStdString(), 0.0);
+    tileLabels.push_back(tileLabelCtrl);
+    tileLabelCtrl->Bind(wxEVT_TEXT, &MyFrame::OnTileLabelEdit, this, newTileIndex);
+    TileData& tileData = tileDataMap[newTileIndex];
+
+    // Create and store the timer label
+    wxStaticText* timerLabel = new wxStaticText(tile, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
+    tileSizer->Add(timerLabel, 0, wxALIGN_CENTER | wxALL, 5);
+    timerLabels[newTileIndex] = timerLabel;
+    tileTimers[newTileIndex] = new TileTimer(timerLabels[newTileIndex], tileData);
+
+    // Add the tile label to the sizer and layout
+    tileSizer->Add(tileLabelCtrl, 0, wxALIGN_CENTER | wxALL, 5);
+    tile->SetSizer(tileSizer);
+    tile->Layout();
+
+    if (gridSizer) {
+        gridSizer->Add(tile, 1, wxALIGN_CENTER | wxALL, 5);
+        scrollArea->Layout();
+        scrollArea->FitInside();  // Ensure the scroll area fits the new content
+    }
+}
+
+void MyFrame::CreateTilesFromData() {
+    for (auto& pair : tileDataMap) {
+        int i = pair.first;
+        TileData& tileData = pair.second;
+
+        wxWindow *tile = new wxWindow(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
+        wxBoxSizer *tileSizer = new wxBoxSizer(wxVERTICAL);
+
+        wxStaticBitmap *tileImage = new wxStaticBitmap(tile, i, normalBitmap);
+        tileImage->Bind(wxEVT_LEFT_DOWN, &MyFrame::OnTileClicked, this);
+        tileImage->Bind(wxEVT_LEFT_DCLICK, &MyFrame::OnTileDoubleClick, this);
+
+        wxTextCtrl* tileLabelCtrl = new wxTextCtrl(tile, i+101, wxString::FromUTF8(tileData.label),
+                                                   wxDefaultPosition, wxSize(85, 60),
+                                                   wxTE_PROCESS_ENTER | wxTE_MULTILINE | wxBORDER_NONE);
+
+        // Attach event bindings
+        tileLabels.push_back(tileLabelCtrl); // Store the text control reference
+        tileLabelCtrl->Bind(wxEVT_TEXT, &MyFrame::OnTileLabelEdit, this,i+101);
+
+         // Create a label for the timer
+        wxTimeSpan timeElapsed = wxTimeSpan::Seconds(pair.second.timerElapsed);
+        wxStaticText* timerLabel;
+        if(timeElapsed > 0){
+            timerLabel = new wxStaticText(tile, wxID_ANY, wxString::Format("%dm", timeElapsed.GetMinutes()),
+                                                        wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
+                                                    }
+        else{
+            timerLabel = new wxStaticText(tile, wxID_ANY, wxString(""),
+                                                        wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
+        }
+        tileSizer->Add(timerLabel, 0, wxALIGN_CENTER | wxALL, 5);
+
+        timerLabels[i] = timerLabel;
+        tileTimers[i] = new TileTimer(timerLabels[i], tileData, timeElapsed);
+        timerLabel->SetForegroundColour(*wxLIGHT_GREY);
+
+        tileSizer->Add(tileLabelCtrl, 0, wxALIGN_CENTER | wxALL, 5);
+
+        tile->SetSizer(tileSizer);
+        tile->Layout();
+        gridSizer->Add(tile, 1, wxALIGN_CENTER | wxALL, 5);
+    }
+}
+
+// UPDATE - EditTile
+
+void MyFrame::OnTileLabelEdit(wxCommandEvent& event) {
+    wxTextCtrl* labelCtrl = dynamic_cast<wxTextCtrl*>(event.GetEventObject());
+    int tileIndex = event.GetId() -101;
+    // std::cout << tileIndex << std::endl;
+    // std::cout << tileDataMap[0].label << std::endl;
+    if (tileIndex > -1) {
+        wxString newLabel = labelCtrl->GetValue();
+        // std::cout << newLabel.ToStdString() << std::endl;
+        tileDataMap[tileIndex].label = newLabel;
+    }
+}   

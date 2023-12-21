@@ -43,7 +43,17 @@ std::map<int, TileData> XMLSerializer::DeserializeTileDataMap(const wxXmlDocumen
             timerElapsedStr.ToLongLong(&elapsedSeconds);
             tileData.timerElapsed = elapsedSeconds;
             
-            // Process SubTask nodes if present (currently not in your XML)
+            // Process SubTasks node
+            for (wxXmlNode* subtaskNode = tileNode->GetChildren(); subtaskNode; subtaskNode = subtaskNode->GetNext()) {
+
+                        if (subtaskNode->GetName() == "SubTask") {
+                            // Assuming the subtask text is stored in a child text node
+                            if (subtaskNode->GetChildren() && subtaskNode->GetChildren()->GetType() == wxXML_TEXT_NODE) {
+                                wxString subtaskText = subtaskNode->GetChildren()->GetContent();
+                                tileData.subTasks.push_back(subtaskText.ToStdString());
+                            }
+                        }
+            }
 
             tileDataMap[id] = tileData;
         }

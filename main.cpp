@@ -10,6 +10,7 @@
 #include <wx/filename.h>
 #include <wx/image.h>
 #include <wx/timer.h>
+#include <wx/event.h>
 #include "XML/TaskListDocument.h"
 #include "DataModels/TileTimer/TileTimer.h"
 
@@ -31,6 +32,7 @@ public:
 // Implement MyApp & MyFrame
 wxIMPLEMENT_APP(MyApp);
 
+// DEF
 class MyFrame : public wxFrame {
 public:
     MyFrame(const wxString& title);
@@ -55,15 +57,15 @@ private:
     void CreateNewTile();
     const wxSize tilesize; // Define a fixed size for the tiles   
 
-    wxBitmap normalBitmap; // Bitmap for normal state
-    wxBitmap selectedBitmap; // Bitmap for selected state
+    wxBitmap normalBitmap; // Bitmap for normal tile state
+    wxBitmap selectedBitmap; // Bitmap for selected tile state
 
     // Handlers for events
-    void OnExit(wxCommandEvent& event);
     void OnKey(wxKeyEvent& event);
     void OnTileClicked(wxMouseEvent& event);
     void OnTileDoubleClick(wxMouseEvent& event);
     void OnTileLabelEdit(wxCommandEvent& event);
+    void OnExit(wxCommandEvent& event);
 
     // Helper function to load sub-tasks
     void LoadSubTasks(int tileNumber);
@@ -73,6 +75,10 @@ private:
     void StartTimerForTile(int tileIndex);
     std::map<int, wxStaticText*> timerLabels;
 
+    // SubTasks
+    void AddNewSubTask();
+    void OnSubTaskEdit(wxListEvent& event);
+    void OnSubTaskEditCallback(int itemIndex, const wxString& newLabel);
     int GetVisibleRowIndex();
 
     std::map<int, wxDateTime> lastKeyPressTime;
@@ -102,13 +108,21 @@ wxEND_EVENT_TABLE()
 void MyFrame::LoadSubTasks(int tileNumber) {
     subTasksListCtrl->DeleteAllItems();
 
-    // Replace this with your actual sub-task loading logic
-    for (int i = 0; i < 5; ++i) { // Assuming a maximum of 5 sub-tasks for simplicity
-        subTasksListCtrl->InsertItem(i, wxString::Format("Sub-task %d for Tile %d", i + 1, tileNumber));
-    }
+    // Check if the tileNumber is valid and present in tileDataMap
+    if (tileDataMap.find(tileNumber) != tileDataMap.end()) {
+        // Get the sub-tasks for the specified tile
+        const std::vector<std::string>& subTasks = tileDataMap[tileNumber].subTasks;
 
-    subTasksListCtrl->SetColumnWidth(0, wxLIST_AUTOSIZE);
+        // Insert each sub-task into the list control with numbering
+        for (size_t i = 0; i < subTasks.size(); ++i) {
+            wxString itemLabel = wxString::Format("%zu. %s", i + 1, subTasks[i]);
+            subTasksListCtrl->InsertItem(i, itemLabel);
+        }
+    }
 }
+
+
+
 
 
 void MyFrame::OnKey(wxKeyEvent& event) {
@@ -126,6 +140,10 @@ void MyFrame::OnKey(wxKeyEvent& event) {
                 labelCtrl->SelectAll(); // Optional: Select all text for immediate editing
             }
         }
+    }
+    // Handle Control+Shift+T key press
+    else if (event.GetModifiers() == (wxMOD_CONTROL | wxMOD_SHIFT) && event.GetKeyCode() == 'T') {
+        AddNewSubTask();
     }
     // Handle number keys (1-5)
     else if (keyCode >= '1' && keyCode <= '4') {
@@ -154,11 +172,13 @@ void MyFrame::OnKey(wxKeyEvent& event) {
 bool MyApp::OnInit() {
     wxInitAllImageHandlers();
     MyFrame *frame = new MyFrame("MiniTask");
-    frame->SetInitialSize(wxSize(520, 480)); // Set the default screen size
+    frame->SetInitialSize(wxSize(520, 680)); // Set the default screen size
     frame->Show(true);
     return true;
 }
 
+
+// CONSTRUCTOR
 MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesize(100, 100) {
     // Load things from file system
     LoadBitmaps();
@@ -178,7 +198,7 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
     customCombo->Append("Project 4");
 
     // Set the initial size of the scroll area
-    wxSize initialScrollAreaSize(520, 120); // Replace with your desired size
+    wxSize initialScrollAreaSize(520, 240); // Replace with your desired size
     scrollArea = new wxScrolledWindow(panel, wxID_ANY, wxDefaultPosition, initialScrollAreaSize, wxVSCROLL);
     scrollArea->SetScrollRate(0, 10); // Vertical scroll rate
     scrollArea->SetBackgroundColour(wxColour("#edf3f9"));
@@ -198,15 +218,12 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
     // Initialize the grid to display sub-tasks
     // Initialize the list control to display sub-tasks
     subTasksListCtrl = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_NO_HEADER);
-    subTasksListCtrl->InsertColumn(0, "Sub-tasks"); // Add a single column
-
-    // Example: Add 5 rows for sub-tasks
-    for (int i = 0; i < 5; ++i) {
-        subTasksListCtrl->InsertItem(i, wxString::Format("Sub-task %d", i + 1));
-    }
-
-    subTasksListCtrl->SetColumnWidth(0, wxLIST_AUTOSIZE_USEHEADER);
+    subTasksListCtrl->InsertColumn(0, "Sub-Tasks"); // Add a single column
+    // Set the width of the first column to 350 pixels
+    subTasksListCtrl->SetColumnWidth(0, 350);
     subTasksListCtrl->Show(true);
+    subTasksListCtrl->Bind(wxEVT_LIST_END_LABEL_EDIT, &MyFrame::OnSubTaskEdit, this);
+
 
     // Main Sizer for the frame
     // Add a padding border or margin around the panel
@@ -247,7 +264,7 @@ void MyFrame::SelectTile(int tileIndex) {
     // scrollArea->Scroll((tileIndex) * 6, -1); // Set scroll based on tile position
     currentSelectedTileIndex = tileIndex;
     // Load sub-tasks for the selected tile
-    LoadSubTasks(tileIndex + 1); // tileIndex + 1 because IDs start from 1
+    LoadSubTasks(tileIndex); // tileIndex + 1 because IDs start from 1
 }
 
 
@@ -417,3 +434,41 @@ void MyFrame::OnTileLabelEdit(wxCommandEvent& event) {
         tileDataMap[tileIndex].label = newLabel;
     }
 }   
+
+// SUBTASKS
+void MyFrame::AddNewSubTask() {
+    int newSubTaskIndex = subTasksListCtrl->GetItemCount();
+    subTasksListCtrl->InsertItem(newSubTaskIndex, "New Sub-task");
+
+    tileDataMap[currentSelectedTileIndex].subTasks.push_back("");
+    // Set focus to the new subtask for editing
+    subTasksListCtrl->EditLabel(newSubTaskIndex);
+
+    // TODO: Need to add in input pausing so we don't change tiles during input state
+}
+
+void MyFrame::OnSubTaskEdit(wxListEvent& event) {
+    int itemIndex = event.GetIndex(); // The index of the item in the list
+    wxString newLabel = event.GetText(); // The new text for the subtask
+
+    // Update the subtask in data model
+    if (currentSelectedTileIndex != -1 && currentSelectedTileIndex < tileDataMap.size()) {
+        // Assuming each tile's subtasks are stored in a vector of strings
+        if (itemIndex >= 0) {
+            tileDataMap[currentSelectedTileIndex].subTasks[itemIndex] = newLabel.ToStdString();
+            // Update the list control item to show the number and the new label
+            wxTheApp->CallAfter([this, itemIndex, newLabel]() {
+                this->OnSubTaskEditCallback(itemIndex, newLabel);
+            });
+        }
+    }
+    // Debug
+    // std::cout << tileDataMap[currentSelectedTileIndex].label << std::endl;
+    // std::cout << itemIndex << std::endl;
+    // std::cout << tileDataMap[currentSelectedTileIndex].subTasks[itemIndex] << std::endl;
+}
+
+void MyFrame::OnSubTaskEditCallback(int itemIndex, const wxString& newLabel) {
+    wxString updatedLabel = wxString::Format("%d. %s", itemIndex + 1, newLabel);
+    subTasksListCtrl->SetItemText(itemIndex, updatedLabel);
+}

@@ -14,6 +14,8 @@
 #include "XML/TaskListDocument.h"
 #include "DataModels/TileTimer/TileTimer.h"
 
+#include "Networking/Bard/callbard.h"
+
 #include <map>
 #include <iostream>
 #include <fstream>
@@ -151,7 +153,7 @@ void MyFrame::OnKey(wxKeyEvent& event) {
         SelectTile(tileIndex);
         // Check if this is a double press
         if (lastKeyPressTime.count(keyCode) > 0 && 
-            (now - lastKeyPressTime[keyCode]).GetMilliseconds() < 500) { // 500 ms for double press
+            (now - lastKeyPressTime[keyCode]).GetMilliseconds() < 300) { // 500 ms for double press
             int tileIndex = (visibleRow * 4) + (keyCode - '1');
             StartTimerForTile(tileIndex);
             lastKeyPressTime.erase(keyCode);

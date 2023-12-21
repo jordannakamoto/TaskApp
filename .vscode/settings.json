@@ -67,6 +67,12 @@
         "map": "cpp",
         "deque": "cpp",
         "fstream": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "any": "cpp",
+        "forward_list": "cpp",
+        "span": "cpp",
+        "valarray": "cpp",
+        "numeric": "cpp",
+        "ranges": "cpp"
     }
 }

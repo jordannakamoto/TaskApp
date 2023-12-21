@@ -14,7 +14,7 @@
 #include "XML/TaskListDocument.h"
 #include "DataModels/TileTimer/TileTimer.h"
 
-#include "Networking/Bard/callbard.h"
+#include "Networking/ai_api_python_process.h"
 
 #include <map>
 #include <iostream>
@@ -93,6 +93,9 @@ private:
     void SaveData(const wxString& baseFilePath);
     void LoadData(const wxString& baseFilePath);
 
+    // AI Integration
+    std::map<std::string, std::vector<std::string>> task_map;
+    void LoadDataFromTaskMap(std::map<std::string, std::vector<std::string>> task_map);
 
      void OnClose(wxCloseEvent& event);
     // Declare the event table for wxWidgets to use
@@ -210,8 +213,8 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
 
 
     // CREATE TILES:
-    LoadData(basePath);
-    CreateTilesFromData();
+    // LoadData(basePath);
+    // CreateTilesFromData();
 
     // Set the grid sizer for the scroll area
     scrollArea->SetSizer(gridSizer);
@@ -239,6 +242,12 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
     mainSizer->SetSizeHints(this);
     this->Bind(wxEVT_CHAR_HOOK, &MyFrame::OnKey, this);
     Centre();
+
+    AI_API_Python_Process ai_process;
+    //test
+    task_map = ai_process.test_openai_video_parser("https://www.youtube.com/watch?v=NlXfg5Pxxh8");
+    LoadDataFromTaskMap(task_map);
+    CreateTilesFromData();
 }
 
 void MyFrame::SelectTile(int tileIndex) {
@@ -473,4 +482,19 @@ void MyFrame::OnSubTaskEdit(wxListEvent& event) {
 void MyFrame::OnSubTaskEditCallback(int itemIndex, const wxString& newLabel) {
     wxString updatedLabel = wxString::Format("%d. %s", itemIndex + 1, newLabel);
     subTasksListCtrl->SetItemText(itemIndex, updatedLabel);
+}
+
+void MyFrame::LoadDataFromTaskMap(std::map<std::string, std::vector<std::string>> task_map){
+    int tileIndex = 0;  // Initial index for tiles
+    tileDataMap.clear();
+
+    for (const auto& [task, subTasks] : task_map) {
+        TileData tile(task, 0);  // Assuming timerElapsed is initialized as 0
+
+        for (const auto& subTask : subTasks) {
+            tile.addSubTask(subTask);
+        }
+
+        tileDataMap[tileIndex++] = tile;  // Assign to tileDataMap and increment index
+    }
 }

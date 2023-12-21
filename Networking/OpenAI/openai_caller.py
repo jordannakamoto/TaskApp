@@ -1,15 +1,20 @@
 from openai import OpenAI
 from youtube_transcript_api import YouTubeTranscriptApi
 import os
-import nltk
-nltk.download('punkt')
-nltk.download('stopwords')
+#import nltk
+# need to use the downloder to get wordlists on first run
+# nltk.download('punkt')
+# nltk.download('stopwords')
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+import json
+import sys
+from dotenv import load_dotenv
 
 
 # Set your OpenAI API key
-os.environ["OPENAI_API_KEY"] = "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"
+load_dotenv()
+OpenAI.api_key = os.getenv('OPENAI_API_KEY')
 client = OpenAI()
 maximum_context_length = 4097
 
@@ -78,12 +83,12 @@ def process_transcript(transcript):
         group_title = generate_group_title(tasks_in_group)
         titled_task_dict[group_title] = tasks_in_group
 
-    # Print task groups with their new titles and counts
-    for title, tasks_in_group in titled_task_dict.items():
-        print(f"{title} has {len(tasks_in_group)} tasks:")
-        for i, task in enumerate(tasks_in_group, 1):
-            print(f"  {i}. {task}")
-        print()  # Add an extra newline for spacing between groups
+    # # Print task groups with their new titles and counts
+    # for title, tasks_in_group in titled_task_dict.items():
+    #     print(f"{title} has {len(tasks_in_group)} tasks:")
+    #     for i, task in enumerate(tasks_in_group, 1):
+    #         print(f"  {i}. {task}")
+    #     print()  # Add an extra newline for spacing between groups
 
     return titled_task_dict
 
@@ -188,8 +193,15 @@ def parse_video_id(url):
     return None  # Return None if the URL format is not recognized
 
 # Example Usage
-youtube_url = "https://www.youtube.com/watch?v=NlXfg5Pxxh8"  # Replace with a YouTube URL
+
+if len(sys.argv) > 1:
+    youtube_url = sys.argv[1]  # Get the YouTube URL from command-line argument
+else:
+    youtube_url = "default_url"  # Or some default value
+
 video_id = parse_video_id(youtube_url)
 transcript = get_transcript(video_id)
 transcript = filter_transcript(transcript)
-process_transcript(transcript)
+tasks_dict = process_transcript(transcript)
+with open('output.json', 'w') as outfile:
+        json.dump(tasks_dict, outfile)

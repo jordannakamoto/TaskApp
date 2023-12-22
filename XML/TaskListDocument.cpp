@@ -6,8 +6,8 @@ wxIMPLEMENT_DYNAMIC_CLASS(TaskListDocument, wxDocument);
 
 std::ostream &TaskListDocument::SaveObject(std::ostream &stream)
 {
-    // Assuming you have a method to serialize tileDataMap into a wxXmlDocument
-    wxXmlDocument doc = serializer.SerializeTileDataMap(tileDataMap);
+    // Assuming you have a method to serialize tileDataVector into a wxXmlDocument
+    wxXmlDocument doc = serializer.SerializeTileDataVector(tileDataVector);
 
     // Wrap the std::ostream
     auto wrapper = OStreamWrapper(stream);
@@ -24,8 +24,8 @@ std::istream &TaskListDocument::LoadObject(std::istream &stream)
     wxXmlDocument doc = serializer.DecompressXml(wrapper);
 
 
-    // Deserialize the XML document back into tileDataMap
-    tileDataMap = serializer.DeserializeTileDataMap(doc);
+    // Deserialize the XML document back into tileDataVector
+    tileDataVector = serializer.DeserializeTileDataVector(doc);
 
     // Handle wxWidgets stream state issue if necessary
     stream.clear();

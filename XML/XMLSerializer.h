@@ -6,6 +6,8 @@
 #include <wx/zipstrm.h>
 #include <wx/wfstream.h>
 #include <map>
+#include <vector>
+
 
 #include <memory>
 
@@ -14,8 +16,8 @@
 
 class XMLSerializer {
 public:
-    wxXmlDocument SerializeTileDataMap(const std::map<int, TileData>& tileDataMap);
-    std::map<int, TileData> DeserializeTileDataMap(const wxXmlDocument& doc);
+    wxXmlDocument SerializeTileDataVector(const std::vector<TileData>& tileDataVector);
+    std::vector<TileData> DeserializeTileDataVector(const wxXmlDocument& doc);
 
     void CompressXml(const wxXmlDocument &doc, wxOutputStream &outStream);
     void CompressXml(const wxXmlDocument &doc, const wxString &zipFile);

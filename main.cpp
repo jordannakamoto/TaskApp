@@ -56,7 +56,7 @@ private:
     TaskListDocument taskListDoc;
 
     // Document Data Structures to be managed by the view
-    std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
+    std::vector<TileData> tileDataVector;  // Vector to store data for each tile
     std::map<int, TileTimer*> tileTimers;
     std::vector<wxWindow*> tiles;
     std::vector<wxTextCtrl*> tileLabels; // Store button references
@@ -140,10 +140,10 @@ private:
 void MyFrame::LoadSubTasks(int tileNumber) {
     subTasksListCtrl->DeleteAllItems();
 
-    // Check if the tileNumber is valid and present in tileDataMap
-    if (tileDataMap.find(tileNumber) != tileDataMap.end()) {
+    // Check if the tileNumber is valid and present in tileDataVector
+    if (tileDataVector.size() > tileNumber) {
         // Get the sub-tasks for the specified tile
-        const std::vector<std::string>& subTasks = tileDataMap[tileNumber].subTasks;
+        const std::vector<std::string>& subTasks = tileDataVector[tileNumber].subTasks;
 
         // Insert each sub-task into the list control with numbering
         for (size_t i = 0; i < subTasks.size(); ++i) {
@@ -340,7 +340,7 @@ void MyFrame::LoadBitmaps() {
 void MyFrame::SaveData(const wxString& baseFilePath) {
     // wxString path = wxSaveFileSelector("task data", "xml");
     wxString savePath = baseFilePath + ".xml";
-    taskListDoc.tileDataMap = tileDataMap;
+    taskListDoc.tileDataVector = tileDataVector;
         std::ofstream out(savePath.ToStdString());
         taskListDoc.SaveObject(out);
     
@@ -351,7 +351,7 @@ void MyFrame::LoadData(const wxString& baseFilePath) {
     if (!loadPath.IsEmpty()) {
         std::ifstream in(loadPath.ToStdString());
         taskListDoc.LoadObject(in);
-        tileDataMap = taskListDoc.tileDataMap;
+        tileDataVector = taskListDoc.tileDataVector;
     }
 }
 
@@ -364,7 +364,7 @@ void MyFrame::OnClose(wxCloseEvent& event) {
 // CREATE Tile(Task) Creation
 
 void MyFrame::CreateNewTile() {
-    int newTileIndex = tileDataMap.size();  // Determine the new tile's index
+    int newTileIndex = tileDataVector.size();  // Determine the new tile's index
 
     // Create a panel for the new tile
     wxWindow *tile = new wxWindow(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
@@ -382,10 +382,10 @@ void MyFrame::CreateNewTile() {
     // Attach event bindings
 
     // Add to data structures
-    tileDataMap[newTileIndex] = TileData(tileLabelCtrl->GetValue().ToStdString(), 0.0);
+    tileDataVector.push_back(TileData(tileLabelCtrl->GetValue().ToStdString(), 0.0));
     tileLabels.push_back(tileLabelCtrl);
     tileLabelCtrl->Bind(wxEVT_TEXT, &MyFrame::OnTileLabelEdit, this, newTileIndex);
-    TileData& tileData = tileDataMap[newTileIndex];
+    TileData& tileData = tileDataVector[newTileIndex];
 
     // Create and store the timer label
     wxStaticText* timerLabel = new wxStaticText(tile, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
@@ -406,10 +406,9 @@ void MyFrame::CreateNewTile() {
 }
 
 void MyFrame::CreateTilesFromData() {
-    for (auto& pair : tileDataMap) {
-        int i = pair.first;
-        TileData& tileData = pair.second;
+    int i = 0; // Initialize the index
 
+    for (TileData& tileData : tileDataVector) {
         wxBoxSizer *tileSizer = new wxBoxSizer(wxVERTICAL);
 
         wxWindow *tile = new wxWindow(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
@@ -419,24 +418,24 @@ void MyFrame::CreateTilesFromData() {
         tileImage->Bind(wxEVT_LEFT_DOWN, &MyFrame::OnTileClicked, this);
         tileImage->Bind(wxEVT_LEFT_DCLICK, &MyFrame::OnTileDoubleClick, this);
 
-        wxTextCtrl* tileLabelCtrl = new wxTextCtrl(tile, i+101, wxString::FromUTF8(tileData.label),
+        wxTextCtrl* tileLabelCtrl = new wxTextCtrl(tile, i + 101, wxString::FromUTF8(tileData.label),
                                                    wxDefaultPosition, wxSize(85, 60),
                                                    wxTE_PROCESS_ENTER | wxTE_MULTILINE | wxBORDER_NONE);
 
         // Attach event bindings
         tileLabels.push_back(tileLabelCtrl); // Store the text control reference
-        tileLabelCtrl->Bind(wxEVT_TEXT, &MyFrame::OnTileLabelEdit, this,i+101);
+        tileLabelCtrl->Bind(wxEVT_TEXT, &MyFrame::OnTileLabelEdit, this, i + 101);
 
-         // Create a label for the timer
-        wxTimeSpan timeElapsed = wxTimeSpan::Seconds(pair.second.timerElapsed);
+        // Create a label for the timer
+        wxTimeSpan timeElapsed = wxTimeSpan::Seconds(tileData.timerElapsed);
         wxStaticText* timerLabel;
-        if(timeElapsed > 0){
+        if (timeElapsed > 0) {
             timerLabel = new wxStaticText(tile, wxID_ANY, wxString::Format("%dm", timeElapsed.GetMinutes()),
-                                                        wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
-                                                    }
-        else{
+                wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
+        }
+        else {
             timerLabel = new wxStaticText(tile, wxID_ANY, wxString(""),
-                                                        wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
+                wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER);
         }
         tileSizer->Add(timerLabel, 0, wxALIGN_CENTER | wxALL, 5);
 
@@ -449,7 +448,10 @@ void MyFrame::CreateTilesFromData() {
         tile->SetSizer(tileSizer);
         tile->Layout();
         gridSizer->Add(tile, 1, wxALIGN_CENTER | wxALL, 5);
+
+        i++; // Increment the index
     }
+
     gridSizer->Layout();
 }
 
@@ -459,11 +461,11 @@ void MyFrame::OnTileLabelEdit(wxCommandEvent& event) {
     wxTextCtrl* labelCtrl = dynamic_cast<wxTextCtrl*>(event.GetEventObject());
     int tileIndex = event.GetId() -101;
     // std::cout << tileIndex << std::endl;
-    // std::cout << tileDataMap[0].label << std::endl;
+    // std::cout << tileDataVector[0].label << std::endl;
     if (tileIndex > -1) {
         wxString newLabel = labelCtrl->GetValue();
         // std::cout << newLabel.ToStdString() << std::endl;
-        tileDataMap[tileIndex].label = newLabel;
+        tileDataVector[tileIndex].label = newLabel;
     }
 }   
 
@@ -472,7 +474,7 @@ void MyFrame::AddNewSubTask() {
     int newSubTaskIndex = subTasksListCtrl->GetItemCount();
     subTasksListCtrl->InsertItem(newSubTaskIndex, "New Sub-task");
 
-    tileDataMap[currentSelectedTileIndex].subTasks.push_back("");
+    tileDataVector[currentSelectedTileIndex].subTasks.push_back("");
     // Set focus to the new subtask for editing
     subTasksListCtrl->EditLabel(newSubTaskIndex);
 
@@ -484,10 +486,10 @@ void MyFrame::OnSubTaskEdit(wxListEvent& event) {
     wxString newLabel = event.GetText(); // The new text for the subtask
 
     // Update the subtask in data model
-    if (currentSelectedTileIndex != -1 && currentSelectedTileIndex < tileDataMap.size()) {
+    if (currentSelectedTileIndex != -1 && currentSelectedTileIndex < tileDataVector.size()) {
         // Assuming each tile's subtasks are stored in a vector of strings
         if (itemIndex >= 0) {
-            tileDataMap[currentSelectedTileIndex].subTasks[itemIndex] = newLabel.ToStdString();
+            tileDataVector[currentSelectedTileIndex].subTasks[itemIndex] = newLabel.ToStdString();
             // Update the list control item to show the number and the new label
             wxTheApp->CallAfter([this, itemIndex, newLabel]() {
                 this->OnSubTaskEditCallback(itemIndex, newLabel);
@@ -495,9 +497,9 @@ void MyFrame::OnSubTaskEdit(wxListEvent& event) {
         }
     }
     // Debug
-    // std::cout << tileDataMap[currentSelectedTileIndex].label << std::endl;
+    // std::cout << tileDataVector[currentSelectedTileIndex].label << std::endl;
     // std::cout << itemIndex << std::endl;
-    // std::cout << tileDataMap[currentSelectedTileIndex].subTasks[itemIndex] << std::endl;
+    // std::cout << tileDataVector[currentSelectedTileIndex].subTasks[itemIndex] << std::endl;
 }
 
 void MyFrame::OnSubTaskEditCallback(int itemIndex, const wxString& newLabel) {
@@ -507,7 +509,7 @@ void MyFrame::OnSubTaskEditCallback(int itemIndex, const wxString& newLabel) {
 
 void MyFrame::LoadDataFromTaskMap(std::map<std::string, std::vector<std::string>> task_map){
     int tileIndex = 0;  // Initial index for tiles
-    tileDataMap.clear();
+    tileDataVector.clear();
 
     for (const auto& [task, subTasks] : task_map) {
         TileData tile(task, 0);  // Assuming timerElapsed is initialized as 0
@@ -516,7 +518,7 @@ void MyFrame::LoadDataFromTaskMap(std::map<std::string, std::vector<std::string>
             tile.addSubTask(subTask);
         }
 
-        tileDataMap[tileIndex++] = tile;  // Assign to tileDataMap and increment index
+        tileDataVector[tileIndex++] = tile;  // Assign to tileDataVector and increment index
     }
 }
 

@@ -9,6 +9,7 @@
 
 
 #include <map>
+#include <vector>
 #include <iostream>
 
 class TaskListDocument : public wxDocument{
@@ -16,7 +17,7 @@ class TaskListDocument : public wxDocument{
     std::ostream &SaveObject(std::ostream &stream) override;
     std::istream &LoadObject (std::istream &stream) override;
 
-    std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
+    std::vector<TileData> tileDataVector;  // Vector to store data for each tile
     std::map<int, TileTimer*> tileTimer; // Store timer references
 
     XMLSerializer serializer;

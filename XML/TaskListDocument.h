@@ -3,7 +3,7 @@
 
 #include <wx/docview.h>
 #include <wx/stdstream.h>
-#include "TileData.h"
+#include "../DataModels/TileData/TileData.h"
 #include "../DataModels/TileTimer/TileTimer.h"
 #include "XMLSerializer.h"
 

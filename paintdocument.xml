@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Tiles>
-  <Tile id="0" label="New Task 1" timerElapsed="0">
-    <SubTask>Test</SubTask>
-  </Tile>
-</Tiles>

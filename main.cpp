@@ -11,6 +11,7 @@
 #include <wx/image.h>
 #include <wx/timer.h>
 #include <wx/event.h>
+#include <wx/thread.h> 
 #include "XML/TaskListDocument.h"
 
 #include "Networking/ai_api_python_process.h"
@@ -23,7 +24,9 @@
 
 using std::cout;
 using std::endl;
+
 // Define a new application type
+
 class MyApp : public wxApp {
 public:
     virtual bool OnInit();
@@ -40,21 +43,25 @@ public:
 
     wxString exePath = wxStandardPaths::Get().GetExecutablePath();
     wxString basePath = wxFileName(exePath).GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "test";
+    void ProcessGptText(std::string gptText);
+
 
 private:
     // Add pointers to the grid and panel as member variables
     wxListCtrl* subTasksListCtrl;
     wxScrolledWindow* scrollArea;
     wxGridSizer* gridSizer;
+    wxComboBox *searchBar;
     int currentSelectedTileIndex = -1;
     TaskListDocument taskListDoc;
 
     // Document Data Structures to be managed by the view
     std::map<int, TileData> tileDataMap;  // Map to store data for each tile, keyed by tile index
-    std::vector<wxTextCtrl*> tileLabels; // Store button references
     std::map<int, TileTimer*> tileTimers;
+    std::vector<wxWindow*> tiles;
+    std::vector<wxTextCtrl*> tileLabels; // Store button references
 
-    // View Items
+    // Tile Stuff
     void CreateNewTile();
     const wxSize tilesize; // Define a fixed size for the tiles   
 
@@ -70,6 +77,9 @@ private:
 
     // Helper function to load sub-tasks
     void LoadSubTasks(int tileNumber);
+
+    void ClearTiles();
+    void DeleteTile(int tileIndex);
     void SelectTile(int tileIndex);
 
     // Timer
@@ -96,6 +106,9 @@ private:
     std::map<std::string, std::vector<std::string>> task_map;
     void LoadDataFromTaskMap(std::map<std::string, std::vector<std::string>> task_map);
 
+    // Search/GPT Bar
+    void OnSearchBarTextEntered(wxCommandEvent& event);
+
      void OnClose(wxCloseEvent& event);
     // Declare the event table for wxWidgets to use
     wxDECLARE_EVENT_TABLE();
@@ -107,7 +120,22 @@ wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
 wxEND_EVENT_TABLE()
 
 // ...
+class GptProcessingThread : public wxThread {
+public:
+    GptProcessingThread(const std::string& textToProcess, MyFrame* frame)
+        : m_textToProcess(textToProcess), m_frame(frame) {}
 
+    virtual ExitCode Entry() {
+        // Place your time-consuming processing code here
+        // For example, call your ProcessGptText function
+        m_frame->ProcessGptText(m_textToProcess);
+        return NULL;
+    }
+
+private:
+    std::string m_textToProcess;
+    MyFrame* m_frame;
+};
 
 void MyFrame::LoadSubTasks(int tileNumber) {
     subTasksListCtrl->DeleteAllItems();
@@ -125,10 +153,6 @@ void MyFrame::LoadSubTasks(int tileNumber) {
     }
 }
 
-
-
-
-
 void MyFrame::OnKey(wxKeyEvent& event) {
     int keyCode = event.GetKeyCode();
     int visibleRow = GetVisibleRowIndex();
@@ -143,6 +167,9 @@ void MyFrame::OnKey(wxKeyEvent& event) {
                 labelCtrl->SetFocus();
                 labelCtrl->SelectAll(); // Optional: Select all text for immediate editing
             }
+        }
+        else{
+            event.Skip();
         }
     }
     // Handle Control+Shift+T key press
@@ -194,12 +221,10 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
     // Create a panel to put all our widgets on
     wxPanel *panel = new wxPanel(this, wxID_ANY);
 
-    // Custom dropdown combobox with buttons
-    wxComboBox *customCombo = new wxComboBox(panel, wxID_ANY);
-    customCombo->Append("Project 1");
-    customCombo->Append("Project 2");
-    customCombo->Append("Project 3");
-    customCombo->Append("Project 4");
+    // Search/GPT Bar
+    wxComboBox *searchBar = new wxComboBox(panel, wxID_ANY, wxString(), wxDefaultPosition, wxDefaultSize, 0, NULL,  wxTE_PROCESS_ENTER);
+    searchBar->Append("Project 1");
+    searchBar->Bind(wxEVT_COMMAND_TEXT_ENTER, &MyFrame::OnSearchBarTextEntered, this);
 
     // Set the initial size of the scroll area
     wxSize initialScrollAreaSize(520, 240); // Replace with your desired size
@@ -212,8 +237,8 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
 
 
     // CREATE TILES:
-    // LoadData(basePath);
-    // CreateTilesFromData();
+    LoadData(basePath);
+    CreateTilesFromData();
 
     // Set the grid sizer for the scroll area
     scrollArea->SetSizer(gridSizer);
@@ -233,7 +258,7 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
     // Add a padding border or margin around the panel
     int borderSize = 15;
     wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
-    mainSizer->Add(customCombo, 0, wxEXPAND | wxALL, 10);
+    mainSizer->Add(searchBar, 0, wxEXPAND | wxALL, 10);
     mainSizer->Add(scrollArea, 0, wxEXPAND | wxALL, 10); // Remove the proportion argument to fix the height
     mainSizer->Add(subTasksListCtrl, 1, wxEXPAND | wxALL, 10);
 
@@ -241,12 +266,6 @@ MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title), tilesi
     mainSizer->SetSizeHints(this);
     this->Bind(wxEVT_CHAR_HOOK, &MyFrame::OnKey, this);
     Centre();
-
-    AI_API_Python_Process ai_process;
-    //test
-    task_map = ai_process.test_openai_video_parser("https://www.youtube.com/watch?v=NlXfg5Pxxh8");
-    LoadDataFromTaskMap(task_map);
-    CreateTilesFromData();
 }
 
 void MyFrame::SelectTile(int tileIndex) {
@@ -391,8 +410,10 @@ void MyFrame::CreateTilesFromData() {
         int i = pair.first;
         TileData& tileData = pair.second;
 
-        wxWindow *tile = new wxWindow(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
         wxBoxSizer *tileSizer = new wxBoxSizer(wxVERTICAL);
+
+        wxWindow *tile = new wxWindow(scrollArea, wxID_ANY, wxDefaultPosition, tilesize);
+        tiles.push_back(tile);
 
         wxStaticBitmap *tileImage = new wxStaticBitmap(tile, i, normalBitmap);
         tileImage->Bind(wxEVT_LEFT_DOWN, &MyFrame::OnTileClicked, this);
@@ -429,6 +450,7 @@ void MyFrame::CreateTilesFromData() {
         tile->Layout();
         gridSizer->Add(tile, 1, wxALIGN_CENTER | wxALL, 5);
     }
+    gridSizer->Layout();
 }
 
 // UPDATE - EditTile
@@ -496,4 +518,40 @@ void MyFrame::LoadDataFromTaskMap(std::map<std::string, std::vector<std::string>
 
         tileDataMap[tileIndex++] = tile;  // Assign to tileDataMap and increment index
     }
+}
+
+// searchBar
+// Event handler for searchBar text enter
+void MyFrame::OnSearchBarTextEntered(wxCommandEvent& event) {
+    cout << "combobox enter pressed" << endl;
+
+    wxString searchText = event.GetString();
+
+    // Check if the entered text starts with "gpt:"
+    if (searchText.StartsWith("gpt:")) {
+        // Extract the text following "gpt:"
+        wxString gptText = searchText.AfterFirst(':').Trim();
+
+        // Create and start a separate thread for processing
+        GptProcessingThread* thread = new GptProcessingThread(gptText.ToStdString(), this);
+        if (thread->Create() == wxTHREAD_NO_ERROR) {
+            thread->Run();
+        }
+    }
+}
+
+// Function to process the extracted "gpt:" text
+void MyFrame::ProcessGptText(std::string gptText) {
+    AI_API_Python_Process ai_process;
+    task_map = ai_process.test_openai_video_parser(gptText);
+    LoadDataFromTaskMap(task_map);
+    CreateTilesFromData();
+}
+
+void MyFrame::ClearTiles(){
+    tiles.clear();
+}
+
+void MyFrame::DeleteTile(int tileIndex){
+    tiles.erase(tiles.begin()+tileIndex);
 }

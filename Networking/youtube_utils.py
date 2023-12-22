@@ -36,19 +36,11 @@ def filter_transcript(transcript):
 
     return ' '.join(filtered_transcript), filtered_transcript_length
 
-def generate_prompt_for_video(video_id):
-    transcript = get_transcript(video_id)
-    transcript = filter_transcript(transcript)
-    if transcript:
-        return f"Can you break down this video transcript into 8 tasks with 3-5 subtasks each? The format should be '1. Task 1' for each task title. Here is the transcript: {transcript}"
-    else:
-        return "No transcript available for this video."
-
-def process_chunk(chunk, model_name="gpt-3.5-turbo-1106"):
-    prompt = f"Compose a one sentence task based on the following content, try to use an action word other than 'create':\n{chunk}"
+def process_chunk(chunk, model_name="gpt-3.5-turbo"):
+    prompt = f"Compose a succinct one sentence instruction based on the following content, try to use an action word other than 'create':\n{chunk}"
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo-1106",
+            model="gpt-3.5-turbo",
             max_tokens=1024,
             messages=[
                 {"role": "user", "content": prompt}
@@ -58,26 +50,22 @@ def process_chunk(chunk, model_name="gpt-3.5-turbo-1106"):
     except Exception as e:
         print("An error occurred with OpenAI:", e)
         return None
-   
 
 def process_transcript(transcript,length):
     # Prepare task groups
-    tasks = []
     task_groups = []
     tasks_per_group = 5
 
-    # Calculate the chunk size
-    size_calculation = length / ((8 * tasks_per_group) / 7)
+    chunks = chunk_transcript_by_tokens(transcript,length/((8*tasks_per_group)/7))
+    tasks = []
 
-    # Limit the value to a maximum of 4500
-    chunk_size = size_calculation if size_calculation <= 4500 else 4500
-
-    chunks = chunk_transcript_by_tokens(transcript,chunk_size)
     # Process each chunk and add to tasks list
     for chunk in chunks:
         task = process_chunk(chunk)
         # print(task)
         tasks.append(task)  # Add the task to the list
+
+    
 
     for i in range(0, len(tasks), tasks_per_group):
         task_groups.append(tasks[i:i + tasks_per_group])
@@ -90,12 +78,12 @@ def process_transcript(transcript,length):
         group_title = generate_group_title(tasks_in_group)
         titled_task_dict[group_title] = tasks_in_group
 
-    # # Print task groups with their new titles and counts
-    # for title, tasks_in_group in titled_task_dict.items():
-    #     print(f"{title} has {len(tasks_in_group)} tasks:")
-    #     for i, task in enumerate(tasks_in_group, 1):
-    #         print(f"  {i}. {task}")
-    #     print()  # Add an extra newline for spacing between groups
+    # Print task groups with their new titles and counts
+    for title, tasks_in_group in titled_task_dict.items():
+        print(f"{title} has {len(tasks_in_group)} tasks:")
+        for i, task in enumerate(tasks_in_group, 1):
+            print(f"  {i}. {task}")
+        print()  # Add an extra newline for spacing between groups
 
     return titled_task_dict
 
@@ -131,7 +119,7 @@ def generate_group_title(tasks):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo-1106",
+            model="gpt-3.5-turbo",
             messages=[
                     {"role": "user", "content": prompt}
                 ],
@@ -152,7 +140,7 @@ def summarize_tasks(tasks):
     if prompt:
         try:
             completion = client.chat.completions.create(
-                model="gpt-3.5-turbo-1106",
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
@@ -170,7 +158,7 @@ def summarize_video(video_id):
     if prompt:
         try:
             completion = client.chat.completions.create(
-                model="gpt-3.5-turbo-1106",
+                model="gpt-3.5-turbo",
                 stop=["\n"],
                 messages=[
                     {"role": "user", "content": prompt}
@@ -210,8 +198,4 @@ video_id = parse_video_id(youtube_url)
 transcript = get_transcript(video_id)
 transcript, length = filter_transcript(transcript)
 print("Length in words:", length)
-
-
-tasks_dict = process_transcript(transcript, length)
-with open('output.json', 'w') as outfile:
-        json.dump(tasks_dict, outfile)
+process_transcript(transcript,length)

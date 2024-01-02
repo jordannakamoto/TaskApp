@@ -9,15 +9,7 @@ This app will allow the user to create tasks and time how long they spend on eac
 
 There will be an executable in the folder...
 
-```
-	355CARDEALERSHIP
-	├── Assets     - png logo image
-	└── Functions  - CRUD mysql functions
-        └── SQLCode    - Plain .sql files to copy and paste into mysql cli in order to setup initial data
-        app            - compiled program
-        main.cpp       - main program, setup and draw UI, connect to mysql
-        Makefile       - for compiling and building
-```
+TODO
 
 ## Running the App
 

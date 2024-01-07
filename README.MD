@@ -1,9 +1,8 @@
 # MiniTask
 
-![GitHub contributors](https://img.shields.io/github/stars/jordannakamoto/355CarDealership?style=social)
-
 Task App...
 This app will allow the user to create tasks and time how long they spend on each part, as well as the sublist of things they need to do for each step.
+
 
 ## Getting Started / Installation
 
